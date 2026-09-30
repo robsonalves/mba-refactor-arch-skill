@@ -59,3 +59,7 @@ class NotificationService:
 
     def get_notifications(self, user_id):
         return [n for n in self.notifications if n['user_id'] == user_id]
+
+
+# Instância única compartilhada pelos services (ligada em TaskService).
+notification_service = NotificationService()

@@ -1,4 +1,6 @@
 """Regra de negócio de Task. Antes vivia dentro das rotas."""
+import logging
+
 from sqlalchemy.orm import joinedload
 
 from database import db
@@ -6,6 +8,7 @@ from middlewares.error_handler import BadRequest, NotFound
 from models.category import Category
 from models.task import Task
 from models.user import User
+from services.notification_service import notification_service
 from utils.helpers import (
     MAX_PRIORITY,
     MAX_TITLE_LENGTH,
@@ -16,8 +19,26 @@ from utils.helpers import (
     parse_due_date,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class TaskService:
+    @staticmethod
+    def _notify_assignment(task):
+        """Notifica o responsável quando a task ganha (ou troca de) dono.
+
+        Efeito colateral não crítico: uma falha no envio nunca deve
+        quebrar a criação/atualização da task."""
+        if not task.user_id:
+            return
+        user = db.session.get(User, task.user_id)
+        if not user:
+            return
+        try:
+            notification_service.notify_task_assigned(user, task)
+        except Exception as exc:  # efeito colateral: log, não propaga
+            logger.warning('Falha ao notificar atribuição da task %s: %s', task.id, exc)
+
     @staticmethod
     def serialize(task, include_relations=False):
         data = task.to_dict()
@@ -105,6 +126,7 @@ class TaskService:
 
         db.session.add(task)
         db.session.commit()
+        TaskService._notify_assignment(task)
         return TaskService.serialize(task)
 
     @staticmethod
@@ -132,9 +154,11 @@ class TaskService:
                 raise BadRequest('Prioridade deve ser entre 1 e 5')
             task.priority = data['priority']
 
+        reassigned = False
         if 'user_id' in data:
             if data['user_id'] and not db.session.get(User, data['user_id']):
                 raise NotFound('Usuário não encontrado')
+            reassigned = bool(data['user_id']) and data['user_id'] != task.user_id
             task.user_id = data['user_id']
 
         if 'category_id' in data:
@@ -156,6 +180,8 @@ class TaskService:
 
         task.updated_at = now_utc()
         db.session.commit()
+        if reassigned:
+            TaskService._notify_assignment(task)
         return TaskService.serialize(task)
 
     @staticmethod

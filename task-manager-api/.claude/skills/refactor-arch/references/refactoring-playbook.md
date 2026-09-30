@@ -169,6 +169,41 @@ DISCOUNT_TIERS = [(10000, 0.10), (5000, 0.05), (1000, 0.02)]
 desconto = next((f*p for limite, p in DISCOUNT_TIERS if f > limite), 0)
 ```
 
+## 13. Camada/módulo morto → Ligar num caller real ou remover
+Quando a Fase 2 marca um módulo como código morto (nunca importado / sem caller),
+a Recommendation "ligar **ou** remover" precisa ser executada **até o fim**.
+Reexportar o módulo num `__init__`/índice **não resolve** — sem invocação efetiva
+ele continua morto.
+
+**Antes** (`services/notification_service.py` existe, mas ninguém chama; só aparece
+reexportado em `services/__init__.py`):
+```python
+# services/__init__.py
+from services.notification_service import NotificationService  # reexport, sem uso
+```
+**Depois — opção A (ligar):** invoque o serviço no ponto de uso legítimo.
+```python
+# services/task_service.py
+from services.notification_service import notification_service
+
+@staticmethod
+def create_task(data):
+    ...
+    db.session.add(task); db.session.commit()
+    if task.user_id:                       # caller real: notifica o responsável
+        user = db.session.get(User, task.user_id)
+        notification_service.notify_task_assigned(user, task)
+    return TaskService.serialize(task)
+```
+O efeito colateral não deve quebrar a operação principal: envolva o envio em
+`try/except` e faça degradação graciosa (log) quando a dependência externa (SMTP)
+não estiver configurada.
+
+**Depois — opção B (remover):** se não há ponto de uso legítimo, delete o módulo e
+qualquer reexport. Não deixe camada cosmética no repositório.
+
+Ao final, **nenhum módulo marcado como morto** pode continuar sem caller.
+
 ---
 
 ## Ordem de aplicação sugerida

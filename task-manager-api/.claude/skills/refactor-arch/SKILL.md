@@ -86,7 +86,10 @@ Só avance para a Fase 3 após um "y" claro.
 ## FASE 3 — Refatoração
 
 1. Leia `references/architecture-guidelines.md` e `references/refactoring-playbook.md`.
-2. Refatore o projeto para **MVC**, aplicando o playbook a cada finding da Fase 2:
+2. Refatore o projeto para **MVC**, aplicando o playbook a cada finding da Fase 2.
+   **Cada Recommendation escrita na Fase 2 deve ser aplicada por inteiro** — não
+   deixe finding pela metade. Se a recomendação oferece alternativas ("ligar **ou**
+   remover", "extrair **ou** deletar"), **escolha uma e execute-a de ponta a ponta**.
    - **Config**: extrair configuração/segredos para um módulo de config lendo de
      variáveis de ambiente (nada hardcoded).
    - **Models**: abstrair acesso a dados com **queries parametrizadas** (elimina
@@ -96,12 +99,23 @@ Só avance para a Fase 3 após um "y" claro.
      retirar lógica de negócio pesada de rotas.
    - **Middlewares**: tratamento de erros centralizado.
    - **Entry point**: um `app`/composition root claro que monta tudo.
+   - **Camadas/módulos mortos**: se a Fase 2 marcou um módulo como código morto ou
+     camada cosmética (nunca importado / sem caller), aplique a Recommendation por
+     inteiro — **ligue** o módulo a um caller real (invoque-o no ponto de uso
+     legítimo, ex.: disparar `NotificationService` na criação/atribuição de uma
+     entidade) **ou remova-o** do projeto. Apenas reexportá-lo em `__init__`/índice
+     **NÃO conta**: sem um caller de verdade ele continua morto e o finding não foi
+     resolvido.
 3. Preserve o **contrato público** (mesmas rotas, mesmos métodos, mesmas respostas).
    Adapte a profundidade da refatoração ao contexto: um monolito exige mais
    transformação que um projeto já parcialmente em camadas.
 4. **Valide** o resultado:
    - A aplicação **inicia sem erros** (rode o servidor / import do entrypoint).
    - Os **endpoints originais continuam respondendo** (smoke test dos principais).
+   - **Nenhum finding ficou pela metade**: releia cada Recommendation da Fase 2 e
+     confirme que foi aplicada por inteiro. Em especial, **nenhum módulo marcado
+     como morto permanece sem caller real** — ou foi ligado (tem invocação
+     efetiva) ou foi removido; reexport isolado em `__init__` não resolve.
 5. Imprima o resumo final:
 
 ```
